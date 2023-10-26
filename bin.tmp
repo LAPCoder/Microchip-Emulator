@@ -1,0 +1,127 @@
+////////////////////////////////////////////////////////////////////////////////
+// Some old code                                                              //
+////////////////////////////////////////////////////////////////////////////////
+
+namespace Syntax
+{
+	// Copy (LoaD) a number (from the str argument) to a pointer (reg)
+	template<int num> constexpr inline void LD(
+		const char *str,
+		MOS_6502 *mos_6502,
+		Register<num> &src,
+		Register<num> &reg,
+		Op_allowed ops)
+	{
+		// TODO: support https://en.wikibooks.org/wiki/6502_Assembly#Zero_Page_Indexed_Indirect:_.28zp.2Cx.29
+		if (strlen(str) == 0)
+		{
+			if (src != nullptr)
+				reg = src;
+			return;
+		}
+		char *string_dirty = "";
+		strcpy(string_dirty, str);
+		if (*string_dirty == '$')
+		{
+			string_dirty++;
+			if ((strlen(string_dirty) == 2 && ops[ZP]) ||
+				(strlen(string_dirty) == 4 && std::isdigit(*(string_dirty+2))) && ops[A])
+					reg = mos_6502->ram[std::stoi(string_dirty)];
+			else if ((strlen(string_dirty) == 6 && *(string_dirty+4) == ',') ||
+					 (strlen(string_dirty) == 4 && *(string_dirty+2) == ','))
+				switch (*(string_dirty+(strlen(string_dirty) == 6 ?5:3)))
+				{
+					case 'X':
+						if (ops[A_X])
+						{
+							reg = mos_6502->ram[
+									std::stoi(string_dirty)+
+									mos_6502->X()];
+							break;
+						}
+					case 'Y':
+						if (ops[A_Y])
+						{
+							reg = mos_6502->ram[
+									std::stoi(string_dirty)+
+									mos_6502->Y()];
+							break;
+						}
+						break;
+					default:
+						THROW_SYNTAX;
+						break;
+				}
+			else THROW_SYNTAX;
+		}
+		else if (*string_dirty == '#' && *(string_dirty+1) == '$' && ops[S])
+			reg = mos_6502->ram[std::stoi(string_dirty+2)];
+		else THROW_SYNTAX;
+	}
+	template<int num> constexpr inline void ST(
+		const char *str,
+		MOS_6502 *mos_6502,
+		Register<num> &src,
+		Register<num> &reg,
+		Op_allowed ops)
+	{
+		// TODO: support https://en.wikibooks.org/wiki/6502_Assembly#Zero_Page_Indexed_Indirect:_.28zp.2Cx.29
+		if (strlen(str) == 0)
+		{
+			THROW_SYNTAX;
+		}
+		char *string_dirty = "";
+		strcpy(string_dirty, str);
+		if (*string_dirty == '$')
+		{
+			string_dirty++;
+			if ((strlen(string_dirty) == 2 && ops[ZP]) ||
+				(strlen(string_dirty) == 4 && std::isdigit(*(string_dirty+2))) && ops[A])
+					mos_6502->ram[std::stoi(string_dirty)] = reg();
+			else if ((strlen(string_dirty) == 6 && *(string_dirty+4) == ',') ||
+					 (strlen(string_dirty) == 4 && *(string_dirty+2) == ','))
+				switch (*(string_dirty+(strlen(string_dirty) == 6 ?5:3)))
+				{
+					case 'X':
+						if (ops[A_X])
+						{
+							mos_6502->ram[
+								std::stoi(string_dirty)+
+								mos_6502->X()] = reg();
+							break;
+						}
+					case 'Y':
+						if (ops[A_Y])
+						{
+							mos_6502->ram[
+								std::stoi(string_dirty)+
+								mos_6502->Y()] = reg();
+							break;
+						}
+						break;
+					default:
+						THROW_SYNTAX;
+						break;
+				}
+			else THROW_SYNTAX;
+		}
+		else if (*string_dirty == '#' && *(string_dirty+1) == '$' && ops[S])
+			mos_6502->ram[std::stoi(string_dirty+2)] = reg();
+		else THROW_SYNTAX;
+	}
+	// Copy a case of memory to the accumulator
+	constexpr inline void LDA(const char *str, MOS_6502 *mos_6502)
+	{LD(str, mos_6502, NULL, mos_6502->A, Op_allowed({ZP_Y,ZP_IND_X,ZP_IND_Y}, true));}
+	constexpr inline void LDX(const char *str, MOS_6502 *mos_6502)
+	{LD(str, mos_6502, nullptr, mos_6502->X, Op_allowed({A,A_Y,S,ZP,ZP_Y}, false));}
+	constexpr inline void LDY(const char *str, MOS_6502 *mos_6502)
+	{LD(str, mos_6502, nullptr, mos_6502->Y, Op_allowed({A,A_X,S,ZP,ZP_X}, false));}
+
+	constexpr inline void STA(const char *str, MOS_6502 *mos_6502)
+	{ST(str, mos_6502, mos_6502->A, Op_allowed({ZP_Y,ZP_IND_X,ZP_IND_Y,S}, true));}
+	constexpr inline void STX(const char *str, MOS_6502 *mos_6502)
+	{ST(str, mos_6502, mos_6502->X, Op_allowed({A,ZP,ZP_Y}, false));}
+	constexpr inline void STY(const char *str, MOS_6502 *mos_6502)
+	{ST(str, mos_6502, mos_6502->Y, Op_allowed({A,ZP,ZP_X}, false));}
+		
+}
