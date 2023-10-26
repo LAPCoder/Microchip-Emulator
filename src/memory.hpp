@@ -7,6 +7,8 @@
 #ifndef MEMORY_HPP
 #define MEMORY_HPP
 
+#include <type_traits>
+
 typedef unsigned char byte;
 
 template <int ARRAY_LEN, class T> class Array_RAM
