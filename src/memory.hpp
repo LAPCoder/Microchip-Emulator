@@ -8,6 +8,8 @@
 #define MEMORY_HPP
 
 #include <type_traits>
+#include <functional>
+#include <numeric>
 
 typedef unsigned char byte;
 
