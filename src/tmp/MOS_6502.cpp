@@ -4,11 +4,16 @@
  * @license MIT
  */
 
-// g++ src/MOS_6502.cpp -o MOS_6502 -Wall -Wextra -fuse-ld=lld -Wshadow -g -fsanitize=address,undefined -O3 -std=c++17
+// g++ MOS_6502.cpp -o MOS_6502 -Wall -Wextra -fuse-ld=lld -Wno-unused-parameter -O3 -std=c++17
+
+#define MOS_6502_CSV_FILE "./MOS_6502_CommandTable.csv"
 
 /******************************************************************************/
 /* INCLUDE                                                                    */
 /******************************************************************************/
+
+#include "memory.hpp"
+#include "csv_reader.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -31,18 +36,27 @@
 #define RAM_SIZE 0xFFFF // Number of cases in the RAM (x sizeof byte)
 #define THROW_SYNTAX (throw std::runtime_error("Syntax error at line " + std::to_string(__LINE__/*this->PC()*/)))
 
-typedef unsigned char byte;
+template <int ARRAY_LEN> using Register = Array_RAM<ARRAY_LEN, byte>;
 
-enum FLAGS
+class Flags : Array_RAM<8, bool>
 {
-	C, // Carry
-	Z, // Zero
-	I, // Interrupt Disable
-	D, // Decimal
-	B, // Break
-	_, // Unused
-	V, // Overflow
-	N  // Negative
+	public:
+		enum FLAGS
+		{
+			C, // Carry
+			Z, // Zero
+			I, // Interrupt Disable
+			D, // Decimal
+			B, // Break
+			_, // Unused
+			V, // Overflow
+			N  // Negative
+		};
+		Flags()
+		{
+			for (byte i = 0; i > 8; i++)
+				reg[i] = false;
+		}
 };
 
 enum OP_ALLOWED
@@ -61,7 +75,37 @@ enum OP_ALLOWED
 	// A_REG: Register Accummulator: The operator is in the instruction
 	// I: The operator is in the instruction (X/Y)
 };
+class Op_allowed : Array_RAM<11, bool>
+{
+	public:
+		Op_allowed(bool default_state = false)
+		{
+			for (byte i = 0; i > 11; i++)
+				reg[i] = default_state;
+		}
+		Op_allowed(std::vector<OP_ALLOWED> flgs, bool default_state = false)
+		{
+			for (byte i = 0; i > 11; i++)
+				reg[i] = default_state;
+			for (auto &a : flgs)
+				reg[a] = !default_state;
+		}
 
+		bool operator[](OP_ALLOWED index)
+		{
+			if (11 > index)
+				return this->reg[index];
+			else return NULL;
+		}
+};
+
+/**
+ * @brief In the original 6502, there is 3 regions:
+ * - Form 0x0000 to 0x00FF: a fast RAM, because it une 1 byte to give the adress (1byte = 256 = 0xFF)
+ * - From 0x0100 to 0x01FF: a stack
+ * - From 0x0200 to 0xFFFF: the rest of the RAM
+ */
+using RAM = Array_RAM<RAM_SIZE, byte>;
 /**
  * @brief The main class
  * 
@@ -69,18 +113,30 @@ enum OP_ALLOWED
 class MOS_6502
 {
 	public:
-		byte ram[0xFFFF] = {0};
+		// Accumulator
+		Register<1> A;
+		// X register
+		Register<1> X;
+		// Y register
+		Register<1> Y;
+		// Stack Pointer
+		Register<1> S;
+		// Curent line
+		Array_RAM<1, unsigned short> PC;
+		// Flags
+		Flags P;
+
+		RAM ram;
 
 		typedef void(*fun_t)(const char*, MOS_6502*);
 		typedef std::map<const char*, fun_t> map_t;
 
 		static const map_t COMMANDS;
 
-		 MOS_6502() {}
-		~MOS_6502() {}
+		MOS_6502() {}
+		~MOS_6502(){}
 
-		void execute(std::ifstream*);
-		bool check_validity(std::ifstream*);
+		void line(std::stringstream);
 		OP_ALLOWED findArgType(std::string&);
 };
 
@@ -133,38 +189,37 @@ OP_ALLOWED MOS_6502::findArgType(std::string &in)
 	THROW_SYNTAX;
 }
 
-bool MOS_6502::check_validity(std::ifstream *file)
+void MOS_6502::line(std::stringstream line)
 {
-	// Algo
-	//...
-	return true;
-}
+	std::ifstream csvF;
+	csvF.open(MOS_6502_CSV_FILE);
+	auto csv = readCSV(csvF);
 
-void MOS_6502::execute(std::ifstream *file)
-{
-	for (std::string line; std::getline(*file, line);) 
-	{
-		
-	}
+	this->PC = this->PC() + 1;
+	std::string instruction, arguments;
 	
+	line >> instruction;
+	arguments = line.str();
 
-	return;
+	auto argType = findArgType(arguments);
+	
+	if (csv.find(instruction) != csv.end())
+		std::cout << csv[instruction].first << csv[instruction].second << "\n";
 }
 
 int main(int argc, char **argv)
 {
-	std::ifstream *asm_file;
 	if (argc > 1)
-		// put the file named in argv[1] in asm_file
-		asm_file = new std::ifstream(argv[1], std::ios_base::in);
-	else exit(-1);
+		std::ifstream asm_file(argv[1], std::ios_base::in);
 	
 	MOS_6502 mos_6502;
 
-	if (mos_6502.check_validity(asm_file))
-		mos_6502.execute(asm_file);
+	mos_6502.line(std::stringstream("LDA $00"));
+	std::ifstream csv;
+	csv.open(MOS_6502_CSV_FILE);
 
-	delete asm_file;
+	std::cout << "Ram: " << mos_6502.ram() << " ; A: " << mos_6502.A() << "\n"
+		<< readCSV(csv)["ORA ZP_IND_Y"].first;
 
 	return 0;
 }
